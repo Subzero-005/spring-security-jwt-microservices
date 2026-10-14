@@ -1,0 +1,12 @@
+target/
+logs/
+*.log
+.classpath
+.project
+.settings/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+.github/modernize/
+HELP.md

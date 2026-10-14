@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spring Security Microservices</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 40px 20px; }
+    h1 { text-align: center; color: #38bdf8; margin-bottom: 8px; font-size: 24px; }
+    p.subtitle { text-align: center; color: #64748b; margin-bottom: 40px; font-size: 14px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; max-width: 560px; margin: 0 auto 24px; }
+    .card h2 { font-size: 16px; color: #94a3b8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    input { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; outline: none; }
+    input:focus { border-color: #38bdf8; }
+    button { background: #0ea5e9; color: white; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 600; transition: background 0.2s; white-space: nowrap; }
+    button:hover { background: #38bdf8; }
+    button.admin-btn { background: #7c3aed; }
+    button.admin-btn:hover { background: #9333ea; }
+    button.user-btn { background: #059669; }
+    button.user-btn:hover { background: #10b981; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .response { margin-top: 16px; background: #0f172a; border-radius: 8px; padding: 14px; font-family: monospace; font-size: 13px; min-height: 48px; border: 1px solid #1e293b; word-break: break-all; }
+    .response.success { border-color: #059669; color: #34d399; }
+    .response.error { border-color: #dc2626; color: #f87171; }
+    .token-box { margin-top: 12px; font-size: 11px; color: #475569; word-break: break-all; font-family: monospace; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .badge.admin { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }
+    .badge.user { background: #05966922; color: #34d399; border: 1px solid #05966944; }
+  </style>
+</head>
+<body>
+  <h1>Spring Security Microservices</h1>
+  <p class="subtitle">JWT-based Role Authentication Demo</p>
+
+  <div class="card">
+    <h2>1. Login <span id="role-badge"></span></h2>
+    <div class="row">
+      <input id="username" type="text" placeholder="Enter username (e.g. admin or john)" value="admin" />
+      <button onclick="login()">Get Token</button>
+    </div>
+    <div id="login-response" class="response" style="color:#475569;">Response will appear here...</div>
+    <div id="token-display" class="token-box"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Access Endpoints</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <button class="admin-btn" onclick="call('admin')">GET /admin</button>
+      <span style="color:#64748b;font-size:13px;">Requires ROLE_ADMIN — via gateway</span>
+    </div>
+    <div class="row">
+      <button class="user-btn" onclick="call('user')">GET /user</button>
+      <span style="color:#64748b;font-size:13px;">Requires ROLE_USER — via gateway</span>
+    </div>
+    <div id="api-response" class="response" style="color:#475569;">Response will appear here...</div>
+  </div>
+
+  <script>
+    let token = null;
+
+    // All calls go through the API gateway, which routes them and handles CORS
+    const GATEWAY = 'http://localhost:8080';
+
+    async function login() {
+      const username = document.getElementById('username').value.trim();
+      const loginRes = document.getElementById('login-response');
+      const tokenDisplay = document.getElementById('token-display');
+      const badge = document.getElementById('role-badge');
+
+      loginRes.className = 'response';
+      loginRes.textContent = 'Logging in...';
+
+      try {
+        const res = await fetch(`${GATEWAY}/auth/login?username=${encodeURIComponent(username)}`, { method: 'POST' });
+        const text = await res.text();
+        if (res.ok) {
+          token = text;
+          loginRes.className = 'response success';
+          loginRes.textContent = '✓ Token received successfully';
+          tokenDisplay.textContent = 'Token: ' + token.substring(0, 60) + '...';
+          badge.innerHTML = username === 'admin'
+            ? '<span class="badge admin">ROLE_ADMIN</span>'
+            : '<span class="badge user">ROLE_USER</span>';
+        } else {
+          loginRes.className = 'response error';
+          loginRes.textContent = `✗ ${res.status} ${res.statusText}`;
+        }
+      } catch (e) {
+        loginRes.className = 'response error';
+        loginRes.textContent = '✗ Could not connect to the API gateway on port 8080. Is it running?';
+      }
+    }
+
+    async function call(service) {
+      const apiRes = document.getElementById('api-response');
+      if (!token) {
+        apiRes.className = 'response error';
+        apiRes.textContent = '✗ Login first to get a token.';
+        return;
+      }
+      apiRes.className = 'response';
+      apiRes.textContent = `Calling /${service}...`;
+
+      try {
+        const res = await fetch(`${GATEWAY}/${service}`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const text = await res.text();
+        if (res.ok) {
+          apiRes.className = 'response success';
+          apiRes.textContent = `✓ ${res.status} OK — ${text}`;
+        } else {
+          apiRes.className = 'response error';
+          apiRes.textContent = `✗ ${res.status} ${res.statusText} — ${text || 'Access denied (wrong role?)'}`;
+        }
+      } catch (e) {
+        apiRes.className = 'response error';
+        apiRes.textContent = `✗ Could not reach ${service}-service through the gateway. Is it running?`;
+      }
+    }
+  </script>
+</body>
+</html>
